@@ -1,0 +1,102 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// USUARIOS (Administradores)
+// ============================================
+model Usuario {
+  id           Int      @id @default(autoincrement())
+  nombre       String   @db.VarChar(255)
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  rol          String   @default("admin") @db.VarChar(50)
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("usuarios")
+}
+
+// ============================================
+// CURSOS
+// ============================================
+model Curso {
+  id                Int      @id @default(autoincrement())
+  nombre            String   @db.VarChar(255)
+  nivel             String?  @db.VarChar(100)
+  modalidad         String?  @db.VarChar(50)
+  fechaInicio       DateTime? @map("fecha_inicio") @db.Date
+  fechaFin          DateTime? @map("fecha_fin") @db.Date
+  horaInicio        String?  @map("hora_inicio") @db.VarChar(10)
+  horaFin           String?  @map("hora_fin") @db.VarChar(10)
+  duracion          String?  @db.VarChar(100)
+  costo             Decimal  @default(0) @db.Decimal(10, 2)
+  color             String?  @default("#6366F1") @db.VarChar(7)
+  descripcion       String?  @db.Text
+  totalHoras        Int?     @map("total_horas")
+  instructor        String?  @db.VarChar(255)
+  contenido         String?  @db.Text
+  requisitosPrevios String?  @map("requisitos_previos") @db.Text
+  enlaceWhatsapp    String?  @map("enlace_whatsapp") @db.VarChar(500)
+  aficheUrl         String?  @map("afiche_url") @db.VarChar(500)
+  afichePublicId    String?  @map("afiche_public_id") @db.VarChar(255)
+  publicado         Boolean  @default(true)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  preinscripciones  Preinscripcion[]
+
+  @@map("cursos")
+}
+
+// ============================================
+// PREINSCRIPCIONES
+// ============================================
+model Preinscripcion {
+  id                    Int      @id @default(autoincrement())
+  cursoId               Int      @map("curso_id")
+  correo                String   @db.VarChar(255)
+  nombres               String   @db.VarChar(255)
+  apellidoPaterno       String   @map("apellido_paterno") @db.VarChar(255)
+  apellidoMaterno       String?  @map("apellido_materno") @db.VarChar(255)
+  telefono              String?  @db.VarChar(50)
+  ci                    String?  @db.VarChar(50)
+  institucionEstudios   String?  @map("institucion_estudios") @db.VarChar(255)
+  observaciones         String?  @db.Text
+  comprobanteUrl        String?  @map("comprobante_url") @db.VarChar(500)
+  comprobantePublicId   String?  @map("comprobante_public_id") @db.VarChar(255)
+  estado                String   @default("pendiente") @db.VarChar(50)
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  curso                 Curso    @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+  historialEstados      HistorialEstado[]
+
+  @@unique([correo, cursoId], name: "unique_correo_curso")
+  @@index([cursoId, estado])
+  @@map("preinscripciones")
+}
+
+// ============================================
+// HISTORIAL DE ESTADOS
+// ============================================
+model HistorialEstado {
+  id              Int      @id @default(autoincrement())
+  preinscripcionId Int     @map("preinscripcion_id")
+  estadoAnterior  String?  @map("estado_anterior") @db.VarChar(50)
+  estadoNuevo     String   @map("estado_nuevo") @db.VarChar(50)
+  observacion     String?  @db.Text
+  createdBy       Int?     @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  preinscripcion  Preinscripcion @relation(fields: [preinscripcionId], references: [id], onDelete: Cascade)
+
+  @@map("historial_estados")
+}
