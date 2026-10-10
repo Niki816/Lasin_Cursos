@@ -26,6 +26,10 @@ const signToken = (id) => {
 const sendTokenResponse = (usuario, statusCode, res) => {
   const token = signToken(usuario.id);
 
+  // Debug: verificar que el token se genera
+  console.log(`[AUTH] ✅ Token generado para ${usuario.email} (id: ${usuario.id})`);
+  console.log(`[AUTH]    Token preview: ${token.substring(0, 30)}...`);
+
   res.status(statusCode).json({
     status: 'ok',
     token,
@@ -69,16 +73,21 @@ export const login = async (req, res, next) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
 
+    console.log(`[AUTH] 🔑 Intento de login: ${email}`);
+
     const usuario = await prisma.usuario.findUnique({ where: { email } });
     if (!usuario || !usuario.activo) {
+      console.warn(`[AUTH] ❌ Usuario no encontrado o inactivo: ${email}`);
       throw new AppError('Credenciales inválidas', 401);
     }
 
     const passwordValida = await bcrypt.compare(password, usuario.passwordHash);
     if (!passwordValida) {
+      console.warn(`[AUTH] ❌ Password incorrecta para: ${email}`);
       throw new AppError('Credenciales inválidas', 401);
     }
 
+    console.log(`[AUTH] ✅ Login exitoso: ${email}`);
     sendTokenResponse(usuario, 200, res);
   } catch (error) {
     if (error.name === 'ZodError') {

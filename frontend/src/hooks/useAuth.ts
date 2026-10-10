@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth.store';
 import { authApi } from '@/lib/api/auth.api';
 import { toast } from 'sonner';
@@ -32,18 +32,28 @@ export function useAuth() {
   };
 }
 
+/**
+ * Hook para páginas protegidas del admin.
+ * Redirige a /login si no está autenticado (solo si NO estamos ya en /login).
+ */
 export function useRequireAuth() {
   const router = useRouter();
+  const pathname = usePathname();
   const { isAuthenticated, _hasHydrated } = useAuthStore();
 
   useEffect(() => {
+    // 1. Esperar a que Zustand rehidrate
     if (!_hasHydrated) return;
 
+    // 2. Si ya estamos en /login, no hacer nada (evita loop)
+    if (pathname === '/login') return;
+
+    // 3. Si no está autenticado, redirigir
     if (!isAuthenticated) {
-      toast.error('Debes iniciar sesión para acceder');
+      console.warn('🚪 Redirigiendo a login: no autenticado');
       router.replace('/login');
     }
-  }, [isAuthenticated, _hasHydrated, router]);
+  }, [isAuthenticated, _hasHydrated, router, pathname]);
 
   return { isAuthenticated, isLoading: !_hasHydrated };
 }

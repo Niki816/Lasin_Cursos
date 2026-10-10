@@ -36,14 +36,34 @@ export function useCursos(options: UseCursosOptions = {}) {
     if (autoFetch) fetchCursos();
   }, [autoFetch, fetchCursos]);
 
-  const crear = async (payload: CursoFormData) => {
-    const nuevo = await cursosApi.crear(payload);
-    setCursos((prev) => [nuevo, ...prev]);
-    toast.success('Curso creado correctamente');
-    return nuevo;
-  };
+const crear = async (payload: CursoFormData) => {
+  // Verificar token antes de enviar
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      const error = new Error('Debes iniciar sesión para crear cursos');
+      toast.error(error.message);
+      throw error;
+    }
+  }
+
+  const nuevo = await cursosApi.crear(payload);
+  setCursos((prev) => [nuevo, ...prev]);
+  toast.success('Curso creado correctamente');
+  return nuevo;
+};
 
   const actualizar = async (id: number, payload: Partial<CursoFormData>) => {
+    // Verificar token antes de enviar
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        const error = new Error('Debes iniciar sesión para actualizar cursos');
+        toast.error(error.message);
+        throw error;
+      }
+    }
+
     const actualizado = await cursosApi.actualizar(id, payload);
     setCursos((prev) => prev.map((c) => (c.id === id ? actualizado : c)));
     toast.success('Curso actualizado correctamente');
@@ -51,6 +71,16 @@ export function useCursos(options: UseCursosOptions = {}) {
   };
 
   const eliminar = async (id: number) => {
+    // Verificar token antes de enviar
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        const error = new Error('Debes iniciar sesión para eliminar cursos');
+        toast.error(error.message);
+        throw error;
+      }
+    }
+
     await cursosApi.eliminar(id);
     setCursos((prev) => prev.filter((c) => c.id !== id));
     toast.success('Curso eliminado');

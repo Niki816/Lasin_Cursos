@@ -11,8 +11,13 @@ export default function AdminLayout({
 }) {
   const { isAuthenticated, isLoading } = useRequireAuth();
 
+  // Mientras carga Zustand O no está autenticado, no renderizar children
   if (isLoading || !isAuthenticated) {
-    return <FullPageSpinner label="Verificando sesión..." />;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-bg-primary">
+        <FullPageSpinner label="Verificando sesión..." />
+      </div>
+    );
   }
 
   return (
