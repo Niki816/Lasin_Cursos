@@ -4,18 +4,62 @@ import { env } from '../config/env.js';
 let transporter = null;
 
 const getTransporter = () => {
-  if (!transporter && env.SMTP_HOST && env.SMTP_USER) {
-    transporter = nodemailer.createTransport({
+  if (!transporter) {
+    console.log('📧 [EMAIL] Config SMTP:', {
       host: env.SMTP_HOST,
-      port: parseInt(env.SMTP_PORT || '587'),
-      secure: false,
-      auth: {
-        user: env.SMTP_USER,
-        pass: env.SMTP_PASS,
-      },
+      port: env.SMTP_PORT,
+      user: env.SMTP_USER,
+      passDefinida: !!env.SMTP_PASS,
+      passLongitud: env.SMTP_PASS?.length,
     });
+
+    if (env.SMTP_HOST && env.SMTP_USER) {
+      transporter = nodemailer.createTransport({
+        host: env.SMTP_HOST,
+        port: parseInt(env.SMTP_PORT || '587'),
+        secure: false,
+        auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+      });
+    }
   }
   return transporter;
+};
+
+// Verifica las credenciales al arrancar el servidor (llamar desde server.js)
+export const verifyEmailConfig = async () => {
+  const t = getTransporter();
+  if (!t) {
+    console.warn('📧 [EMAIL] ⚠️ SMTP no configurado (faltan SMTP_HOST o SMTP_USER)');
+    return;
+  }
+  try {
+    await t.verify();
+    console.log('📧 [EMAIL] ✅ SMTP listo: Gmail acepta las credenciales');
+  } catch (e) {
+    console.error('📧 [EMAIL] ❌ SMTP falló:', e.code, e.message);
+  }
+};
+
+// Envía y deja registrado qué respondió Gmail
+const enviarCorreo = async (tipo, opciones) => {
+  const t = getTransporter();
+  if (!t) {
+    console.warn(`📧 [EMAIL] ❌ (${tipo}) No hay transporter: faltan SMTP_HOST o SMTP_USER`);
+    return;
+  }
+
+  const info = await t.sendMail({
+    from: env.SMTP_FROM || env.SMTP_USER,
+    ...opciones,
+  });
+
+  console.log(`📧 [EMAIL] ✅ (${tipo}) Gmail respondió:`, {
+    aceptados: info.accepted,
+    rechazados: info.rejected,
+    respuesta: info.response,
+  });
+
+  return info;
 };
 
 const emailTemplate = (titulo, badge, badgeColor, contenido) => `
@@ -46,13 +90,10 @@ const infoRow = (label, value) => `
 </div>
 `;
 
+// ============================================
+// PREINSCRIPCIÓN RECIBIDA
+// ============================================
 export const sendConfirmationEmail = async (preinscripcion) => {
-  const t = getTransporter();
-  if (!t) {
-    console.warn('SMTP no configurado, saltando email');
-    return;
-  }
-
   const cursoNombre = preinscripcion.curso.nombre;
   const monto = preinscripcion.curso.costo
     ? `Bs. ${Number(preinscripcion.curso.costo).toFixed(2)}`
@@ -70,22 +111,46 @@ export const sendConfirmationEmail = async (preinscripcion) => {
     </div>
   `;
 
-  await t.sendMail({
-    from: env.SMTP_FROM || env.SMTP_USER,
+  await enviarCorreo('PREINSCRIPCION', {
     to: preinscripcion.correo,
     subject: '📋 Preinscripción recibida',
-    html: emailTemplate('Preinscripción llenada correctamente', '⏳ Pendiente', 'linear-gradient(135deg, rgba(99,102,241,0.25) 0%, rgba(139,92,246,0.2) 100%)', contenido),
+    text: `Hola ${nombreCompleto}. Recibimos tu preinscripción al curso ${cursoNombre}. Espera a que el administrador compruebe tu pago y recibirás un correo de confirmación.`,
+    html: emailTemplate(
+      'Preinscripción llenada correctamente',
+      '⏳ Pendiente',
+      'linear-gradient(135deg, rgba(99,102,241,0.25) 0%, rgba(139,92,246,0.2) 100%)',
+      contenido
+    ),
   });
 };
 
+// ============================================
+// ACEPTADO (incluye enlace al grupo de WhatsApp)
+// ============================================
 export const sendAceptadoEmail = async (preinscripcion, observacion) => {
-  const t = getTransporter();
-  if (!t) return;
+  console.log('📧 [EMAIL] Intentando enviar email de ACEPTADO a:', preinscripcion.correo);
 
   const c = preinscripcion.curso;
   const horario = c.horaInicio && c.horaFin ? `${c.horaInicio} - ${c.horaFin}` : 'Por definir';
   const monto = c.costo ? `Bs. ${Number(c.costo).toFixed(2)}` : 'Consultar';
   const nombre = `${preinscripcion.nombres} ${preinscripcion.apellidoPaterno}`;
+
+  if (!c.enlaceWhatsapp) {
+    console.warn('📧 [EMAIL] ⚠️ El curso no tiene enlaceWhatsapp guardado; el correo saldrá sin el link');
+  }
+
+  const whatsappBlock = c.enlaceWhatsapp
+    ? `
+    <div style="margin-top: 28px; padding: 20px; background: rgba(37,211,102,0.12); border-radius: 16px; border: 1px solid rgba(37,211,102,0.35); text-align: center;">
+      <p style="margin: 0 0 16px 0; color: #94A3B8; font-size: 14px;">
+        Únete al grupo de WhatsApp del curso para recibir avisos y los enlaces de las clases:
+      </p>
+      <a href="${c.enlaceWhatsapp}" target="_blank"
+         style="display: inline-block; padding: 12px 28px; background: #25D366; color: #FFFFFF; font-weight: 800; font-size: 14px; border-radius: 100px; text-decoration: none;">
+        Unirme al grupo de WhatsApp
+      </a>
+    </div>`
+    : '';
 
   const contenido = `
     <p style="color: #94A3B8; margin: 0 0 24px 0;">Hola <strong style="color: #FFFFFF;">${nombre}</strong>,</p>
@@ -103,19 +168,37 @@ export const sendAceptadoEmail = async (preinscripcion, observacion) => {
         <p style="margin: 0; color: #94A3B8; font-size: 14px;"><strong style="color: #A5B4FC;">Detalle:</strong><br>${observacion}</p>
       </div>
     ` : ''}
+    ${whatsappBlock}
   `;
 
-  await t.sendMail({
-    from: env.SMTP_FROM || env.SMTP_USER,
+  const textoPlano = [
+    `Hola ${nombre},`,
+    `Tu inscripción al curso "${c.nombre}" fue APROBADA.`,
+    c.enlaceWhatsapp ? `Únete al grupo de WhatsApp del curso: ${c.enlaceWhatsapp}` : '',
+    observacion ? `Detalle: ${observacion}` : '',
+    'Laboratorio Superior de Informática',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  await enviarCorreo('ACEPTADO', {
     to: preinscripcion.correo,
     subject: `✅ Inscripción confirmada - ${c.nombre}`,
-    html: emailTemplate('Inscripción Confirmada', '✅ Confirmado', 'linear-gradient(135deg, rgba(16,185,129,0.25) 0%, rgba(5,150,105,0.2) 100%)', contenido),
+    text: textoPlano,
+    html: emailTemplate(
+      'Inscripción Confirmada',
+      '✅ Confirmado',
+      'linear-gradient(135deg, rgba(16,185,129,0.25) 0%, rgba(5,150,105,0.2) 100%)',
+      contenido
+    ),
   });
 };
 
+// ============================================
+// RECHAZADO
+// ============================================
 export const sendRechazadoEmail = async (preinscripcion, observacion) => {
-  const t = getTransporter();
-  if (!t) return;
+  console.log('📧 [EMAIL] Intentando enviar email de RECHAZADO a:', preinscripcion.correo);
 
   const c = preinscripcion.curso;
   const nombre = `${preinscripcion.nombres} ${preinscripcion.apellidoPaterno}`;
@@ -136,10 +219,24 @@ export const sendRechazadoEmail = async (preinscripcion, observacion) => {
     </div>
   `;
 
-  await t.sendMail({
-    from: env.SMTP_FROM || env.SMTP_USER,
+  const textoPlano = [
+    `Hola ${nombre},`,
+    `Tu comprobante para el curso "${c.nombre}" fue RECHAZADO.`,
+    observacion ? `Detalle: ${observacion}` : '',
+    'Debes apersonarte al LASIN para regularizar tu inscripción.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  await enviarCorreo('RECHAZADO', {
     to: preinscripcion.correo,
     subject: `⚠️ Revisión de comprobante - ${c.nombre}`,
-    html: emailTemplate('Comprobante Rechazado', '⚠️ Revisión', 'linear-gradient(135deg, rgba(239,68,68,0.25) 0%, rgba(220,38,38,0.2) 100%)', contenido),
+    text: textoPlano,
+    html: emailTemplate(
+      'Comprobante Rechazado',
+      '⚠️ Revisión',
+      'linear-gradient(135deg, rgba(239,68,68,0.25) 0%, rgba(220,38,38,0.2) 100%)',
+      contenido
+    ),
   });
 };
