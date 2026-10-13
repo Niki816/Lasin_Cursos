@@ -186,12 +186,12 @@ export const cambiarEstado = async (req, res, next) => {
       } else if (estado === 'rechazado') {
         await sendRechazadoEmail(actualizada, observacion);
       }
-        } catch (emailError) {
-          console.error('📧 [EMAIL] ❌ Falló el envío:', emailError.code, emailError.message);
-        }
+    } catch (emailError) {
+      console.error('Error al enviar email:', emailError);
+    }
 
     res.json({ status: 'ok', preinscripcion: actualizada });
-    } catch (error) {
+  } catch (error) {
     next(error);
   }
 };
