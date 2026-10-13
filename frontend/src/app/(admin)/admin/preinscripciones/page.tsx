@@ -34,12 +34,17 @@ import './preinscripciones-admin.css';
 /* Tipos y utilidades                                                  */
 /* ------------------------------------------------------------------ */
 
+type PreinscripcionMini = { estado?: string | null };
+
 // Campos extra que quizá aún no estén en tu tipo Curso
 type CursoExtra = {
   aficheUrl?: string | null;
   instructor?: string | null;
   fechaFin?: string | null;
-  _count?: { preinscripciones?: number; inscripciones?: number };
+  // Opción A (recomendada): lista con el estado de cada preinscripción
+  preinscripciones?: PreinscripcionMini[];
+  // Opción B: solo contadores
+  _count?: { preinscripciones?: number; aceptadas?: number };
 };
 type CursoX = Curso & CursoExtra;
 
@@ -63,9 +68,23 @@ const estadoMeta: Record<Estado, { label: string; Icon: LucideIcon; clase: strin
 };
 
 const x = (c: Curso) => c as CursoX;
-const preinscritos = (c: Curso) => x(c)._count?.preinscripciones ?? 0;
-const inscritos = (c: Curso) => x(c)._count?.inscripciones ?? 0;
 const docente = (c: Curso) => x(c).instructor?.trim() || '';
+
+const esAceptada = (p: PreinscripcionMini) => p.estado?.toLowerCase() === 'aceptado';
+
+// Total de todos los que se inscribieron (oficiales o no)
+const totalRegistrados = (c: Curso) =>
+  x(c).preinscripciones?.length ?? x(c)._count?.preinscripciones ?? 0;
+
+// Inscritos oficiales = estado "aceptado"
+const inscritos = (c: Curso) => {
+  const lista = x(c).preinscripciones;
+  if (lista) return lista.filter(esAceptada).length;
+  return x(c)._count?.aceptadas ?? 0;
+};
+
+// Preinscritos = se inscribieron pero aún no son oficiales
+const preinscritos = (c: Curso) => Math.max(0, totalRegistrados(c) - inscritos(c));
 
 /** Estado calculado por fechas:
  *  - finalizado: ya pasó fechaFin
@@ -81,9 +100,10 @@ function estadoDe(c: Curso): Estado {
   return 'proceso';
 }
 
+// Conversión = aceptados ÷ total de los que se inscribieron
 const conversion = (c: Curso) => {
-  const p = preinscritos(c);
-  return p === 0 ? 0 : Math.min(100, Math.round((inscritos(c) / p) * 100));
+  const total = totalRegistrados(c);
+  return total === 0 ? 0 : Math.min(100, Math.round((inscritos(c) / total) * 100));
 };
 
 /* ------------------------------------------------------------------ */
@@ -289,7 +309,7 @@ export default function AdminPreinscripcionesPage() {
           <span className="pre-title-gradient">Preinscripciones</span>
         </h1>
         <p className="text-lg text-text-secondary">
-          Un vistazo a cada curso: inscritos, preinscritos y estado. Entra a uno para ver el detalle.
+          Un vistazo a cada curso: inscritos oficiales, preinscritos y estado. Entra a uno para ver el detalle.
         </p>
 
         {!loading && cursos.length > 0 && (
@@ -541,7 +561,7 @@ export default function AdminPreinscripcionesPage() {
                           )}
                         </div>
 
-                        {/* Inscritos / preinscritos */}
+                        {/* Inscritos (oficiales) / preinscritos (aún no oficiales) */}
                         <div className="grid grid-cols-2 gap-3">
                           <div className="pre-stat rounded-2xl bg-brand-primary/10 p-3.5 text-center">
                             <UserCheck size={18} className="mx-auto mb-1 text-cyan-500" />
